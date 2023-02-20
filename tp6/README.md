@@ -4,6 +4,8 @@
 
 In the Makefile, yoou will just need a flag:
 `pkg-config --cflags sdl2`
+and a flag for the image:
+`pkg-config --cflags sdl2_image`
 And you need to install the SDL2 library:
 `sudo apt-get install libsdl2-dev`
 a thing like this
