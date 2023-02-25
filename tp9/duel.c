@@ -140,7 +140,7 @@ gboolean on_key_press(GtkWidget *widget, GdkEventKey *event, gpointer user_data)
 {
     Game* game = user_data;
 
-    gboolean practice = gtk_toggle_button_get_active(game->ui.training_cb);
+    gboolean practice = gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(game->ui.training_cb));
 
     // If the 'f' key is pressed, moves the player 1 upwards.
     if (event->keyval == GDK_KEY_f && !practice)
@@ -252,6 +252,21 @@ gboolean on_draw(GtkWidget *widget, cairo_t *cr, gpointer user_data)
     return FALSE;
 }
 
+// Sets the 'Pause' state.
+void set_pause(Game* game)
+{
+    // - Set the state field to PAUSE.
+    game->state = PAUSE;
+    // - Set the label of the start button to "Resume".
+    gtk_button_set_label(game->ui.start_button,"Resume");
+    // - Enable the stop button.
+    gtk_widget_set_sensitive(GTK_WIDGET(game->ui.stop_button),FALSE);
+    // - Stop the on_move_disc() function.
+    g_source_remove(game->disc.event);
+
+    // Resets the event ID to zero.
+    game->disc.event = 0;
+}
 
 // Timeout function called at regular intervals to draw the disc.
 gboolean on_move_disc(gpointer user_data)
@@ -271,10 +286,20 @@ gboolean on_move_disc(gpointer user_data)
     GdkRectangle old = game->disc.rect;
 
     // Works out the new position of the disc.
-    game->disc.rect.x = CLAMP(game->disc.rect.x + game->disc.step.x, 0, x_max);
+    if (gdk_rectangle_intersect(&(game->disc.rect), &(game->p1.rect), NULL)) {
+        game->disc.step.x *= -1;
+        game->disc.rect.x = CLAMP(game->disc.rect.x + game->disc.step.x, 0, x_max);
+    }
+    else if (gdk_rectangle_intersect(&(game->disc.rect), &(game->p2.rect), NULL)) {
+        game->disc.step.x *= -1;
+        game->disc.rect.x = CLAMP(game->disc.rect.x + game->disc.step.x, 0, x_max);
+    }
+    else {
+        game->disc.rect.x = CLAMP(game->disc.rect.x + game->disc.step.x, 0, x_max);
+    }
     game->disc.rect.y = CLAMP(game->disc.rect.y + game->disc.step.y, 0, y_max);
 
-    gboolean practice = gtk_toggle_button_get_active(game->ui.training_cb);
+    gboolean practice = gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(game->ui.training_cb));
 
     if (practice) {
         GdkRectangle old_p1 = game->p1.rect;
@@ -288,6 +313,27 @@ gboolean on_move_disc(gpointer user_data)
 
     if (game->disc.rect.y <= 0 || game->disc.rect.y >= y_max) {
         game->disc.step.y *= -1;
+    }
+
+    if (game->disc.rect.x == 0 || game->disc.rect.x == x_max) {
+        char temp[2];
+        if (game->disc.rect.x == 0) {
+            game->p2.score += 1;
+            if (game->p2.score == END_GAME_SCORE) {
+                
+            }
+            g_snprintf(temp,2,"%d", game->p2.score);
+            gtk_label_set_label(game->p2.label, temp);
+        }
+        if (game->disc.rect.x == x_max) {
+            game->p1.score += 1;
+            if (game->p1.score == END_GAME_SCORE) {
+                
+            }
+            g_snprintf(temp,2,"%d", game->p1.score);
+            gtk_label_set_label(game->p1.label,temp);
+        }
+        set_pause(game);
     }
 
 
@@ -307,7 +353,7 @@ void set_play(Game* game)
     // - Set the label of the start button to "Pause".
     gtk_button_set_label(game->ui.start_button,"Pause");
     // - Disable the stop button.
-    gtk_widget_set_sensitive(GTK_WIDGET(game->ui.stop_button),FALSE);
+    gtk_widget_set_sensitive(GTK_WIDGET(game->ui.stop_button),TRUE);
     // - Set the on_move_disc() function to be called at regular intervals.
     // If the timeout function is not activated, activates it.
     // (The event ID is saved into game->disc.event.)
@@ -325,21 +371,18 @@ void set_play(Game* game)
     }
 }
 
-// Sets the 'Pause' state.
-void set_pause(Game* game)
-{
-    // - Set the state field to PAUSE.
-    game->state = PAUSE;
-    // - Set the label of the start button to "Resume".
-    gtk_button_set_label(game->ui.stop_button,"Resume");
-    // - Enable the stop button.
-    gtk_widget_set_sensitive(GTK_WIDGET(game->ui.stop_button),TRUE);
-    // - Stop the on_move_disc() function.
-}
+
 
 // Sets the 'Stop' state.
 void set_stop(Game *game)
 {
+    game->p1.score = 0;
+    game->p2.score = 0;
+    char temp[2];
+    g_snprintf(temp,2,"%d", game->p2.score);
+    gtk_label_set_label(game->p2.label, temp);
+    g_snprintf(temp,2,"%d", game->p1.score);
+    gtk_label_set_label(game->p1.label, temp);
     // - Set the state field to STOP.
     game->state = STOP;
     // - Set the label of the start button to "Start".
@@ -347,6 +390,14 @@ void set_stop(Game *game)
     // - Disable the stop button.
     gtk_widget_set_sensitive(GTK_WIDGET(game->ui.stop_button),FALSE);
 }
+
+// Event handler for the "clicked" signal of the stop button.
+void on_stop(GtkButton *button, gpointer user_data)
+{
+    Game* game = user_data;
+    set_stop(game);
+}
+
 
 // Event handler for the "clicked" signal of the start button.
 void on_start(GtkButton *button, gpointer user_data)
@@ -362,14 +413,6 @@ void on_start(GtkButton *button, gpointer user_data)
         case PAUSE: set_play(game); break;
     };
 }
-
-// Event handler for the "clicked" signal of the stop button.
-void on_stop(GtkButton *button, gpointer user_data)
-{
-    set_stop(user_data);
-}
-
-
 
 
 int main (int argc, char *argv[])
@@ -449,6 +492,7 @@ int main (int argc, char *argv[])
     g_signal_connect(area, "configure-event", G_CALLBACK(on_configure), &game);
     g_signal_connect(area, "draw", G_CALLBACK(on_draw), &game);
     g_signal_connect(start_button, "clicked", G_CALLBACK(on_start), &game);
+    g_signal_connect(stop_button, "clicked", G_CALLBACK(on_stop), &game);
 
     // Runs the main loop.
     gtk_main();
