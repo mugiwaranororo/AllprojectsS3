@@ -1,4 +1,6 @@
 #include <gtk/gtk.h>
+#include <stdlib.h>
+#include <stdio.h>
 
 #define PADDLE_STEP 5               // Step of a paddle in pixels
 #define PADDLE_PERIOD 5             // Period of a paddle in milliseconds
@@ -268,6 +270,31 @@ void set_pause(Game* game)
     game->disc.event = 0;
 }
 
+// Sets the 'Stop' state.
+void set_stop(Game *game)
+{
+    game->p1.score = 0;
+    game->p2.score = 0;
+    char temp[2];
+    g_snprintf(temp,2,"%d", game->p2.score);
+    gtk_label_set_label(game->p2.label, temp);
+    g_snprintf(temp,2,"%d", game->p1.score);
+    gtk_label_set_label(game->p1.label, temp);
+    // - Set the state field to STOP.
+    game->state = STOP;
+    // - Set the label of the start button to "Start".
+    gtk_button_set_label(game->ui.start_button,"Start");
+    // - Disable the stop button.
+    gtk_widget_set_sensitive(GTK_WIDGET(game->ui.stop_button),FALSE);
+}
+
+// Event handler for the "clicked" signal of the stop button.
+void on_stop(GtkButton *button, gpointer user_data)
+{
+    Game* game = user_data;
+    set_stop(game);
+}
+
 // Timeout function called at regular intervals to draw the disc.
 gboolean on_move_disc(gpointer user_data)
 {
@@ -320,7 +347,19 @@ gboolean on_move_disc(gpointer user_data)
         if (game->disc.rect.x == 0) {
             game->p2.score += 1;
             if (game->p2.score == END_GAME_SCORE) {
-                
+                GtkWidget *dialog, *label, *content_area;
+                GtkDialogFlags flags;
+                flags = GTK_DIALOG_DESTROY_WITH_PARENT;
+                dialog = gtk_dialog_new_with_buttons ("Game Over",NULL,flags,("_OK"),GTK_RESPONSE_NONE,NULL);
+                content_area = gtk_dialog_get_content_area (GTK_DIALOG (dialog));
+                char* message;
+                asprintf(&message,"score player 1: %d\n score player 2: %d\n The winner is player 2",game->p1.score,game->p2.score);
+                label = gtk_label_new (message);
+                g_signal_connect_swapped (dialog,"response",G_CALLBACK (gtk_widget_destroy),dialog);
+                gtk_container_add (GTK_CONTAINER (content_area), label);
+                gtk_widget_show_all (dialog);
+                free(message);
+                set_stop(game);
             }
             g_snprintf(temp,2,"%d", game->p2.score);
             gtk_label_set_label(game->p2.label, temp);
@@ -328,7 +367,19 @@ gboolean on_move_disc(gpointer user_data)
         if (game->disc.rect.x == x_max) {
             game->p1.score += 1;
             if (game->p1.score == END_GAME_SCORE) {
-                
+                GtkWidget *dialog, *label, *content_area;
+                GtkDialogFlags flags;
+                flags = GTK_DIALOG_DESTROY_WITH_PARENT;
+                dialog = gtk_dialog_new_with_buttons ("Game Over",NULL,flags,("_OK"),GTK_RESPONSE_NONE,NULL);
+                content_area = gtk_dialog_get_content_area (GTK_DIALOG (dialog));
+                char* message;
+                asprintf(&message,"score player 1: %d\n score player 2: %d\n The winner is player 1",game->p1.score,game->p2.score);
+                label = gtk_label_new (message);
+                g_signal_connect_swapped (dialog,"response",G_CALLBACK (gtk_widget_destroy),dialog);
+                gtk_container_add (GTK_CONTAINER (content_area), label);
+                gtk_widget_show_all (dialog);
+                free(message);
+                set_stop(game);
             }
             g_snprintf(temp,2,"%d", game->p1.score);
             gtk_label_set_label(game->p1.label,temp);
@@ -373,30 +424,7 @@ void set_play(Game* game)
 
 
 
-// Sets the 'Stop' state.
-void set_stop(Game *game)
-{
-    game->p1.score = 0;
-    game->p2.score = 0;
-    char temp[2];
-    g_snprintf(temp,2,"%d", game->p2.score);
-    gtk_label_set_label(game->p2.label, temp);
-    g_snprintf(temp,2,"%d", game->p1.score);
-    gtk_label_set_label(game->p1.label, temp);
-    // - Set the state field to STOP.
-    game->state = STOP;
-    // - Set the label of the start button to "Start".
-    gtk_button_set_label(game->ui.start_button,"Start");
-    // - Disable the stop button.
-    gtk_widget_set_sensitive(GTK_WIDGET(game->ui.stop_button),FALSE);
-}
 
-// Event handler for the "clicked" signal of the stop button.
-void on_stop(GtkButton *button, gpointer user_data)
-{
-    Game* game = user_data;
-    set_stop(game);
-}
 
 
 // Event handler for the "clicked" signal of the start button.
@@ -412,6 +440,12 @@ void on_start(GtkButton *button, gpointer user_data)
         case PLAY: set_pause(game); break;
         case PAUSE: set_play(game); break;
     };
+}
+
+void on_speed_changed(GtkScale *scale, gpointer user_data) {
+    Game* game = user_data;
+    GtkPositionType coeff = gtk_scale_get_value_pos(scale);
+    game->disc.period = DISC_PERIOD * coeff;
 }
 
 
@@ -434,6 +468,7 @@ int main (int argc, char *argv[])
     }
 
     // Gets the widgets.
+    
     GtkWindow* window = GTK_WINDOW(gtk_builder_get_object(builder, "org.gtk.duel"));
     GtkDrawingArea* area = GTK_DRAWING_AREA(gtk_builder_get_object(builder, "area"));
     GtkButton* start_button = GTK_BUTTON(gtk_builder_get_object(builder, "start_button"));
@@ -442,7 +477,7 @@ int main (int argc, char *argv[])
     GtkLabel* p2_score_label = GTK_LABEL(gtk_builder_get_object(builder, "p2_score_label"));
     GtkScale* speed_scale = GTK_SCALE(gtk_builder_get_object(builder, "speed_scale"));
     GtkCheckButton* training_cb = GTK_CHECK_BUTTON(gtk_builder_get_object(builder, "training_cb"));
-
+    
     // Creates the "Game" structure.
     Game game =
     {
@@ -484,8 +519,8 @@ int main (int argc, char *argv[])
                 .training_cb = training_cb,
             },
     };
-
     // Connects event handlers.
+    g_signal_connect(speed_scale, "value-changed", G_CALLBACK(on_speed_changed), &game);
     g_signal_connect(window, "key_press_event", G_CALLBACK(on_key_press), &game);
     g_signal_connect(window, "key_release_event", G_CALLBACK(on_key_release), &game);
     g_signal_connect(window, "destroy", G_CALLBACK(gtk_main_quit), NULL);
